@@ -11,7 +11,7 @@ def export():
 	model = MATMUL()
 
 	mat = torch.rand([768, 768])
-	vec = torch.rand([768])
+	vec = torch.rand([768, 1])
 
 	torch.onnx.export(model, args=(mat, vec), f="matmul.onnx", input_names = ["mat", "vec"], output_names = ["x"], verbose=True)
 

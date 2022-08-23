@@ -30,7 +30,7 @@
 				vec_d.fill(5)
 
 				const mat = new ort.Tensor('float32', mat_d, [768, 768])
-				const vec = new ort.Tensor('float32', vec_d, [768])
+				const vec = new ort.Tensor('float32', vec_d, [768, 1])
 
 				// prepare feeds. use model input names as keys.
 				var feeds = { mat: mat, vec: vec }
