@@ -294,18 +294,19 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         self.pp = copy.deepcopy(target.pp)
         self.hk = copy.deepcopy(target.hk)
 
-    # Turns everything into NaN on webgl
+    # F.layer_norm reimplemented from individual operations
+    # GLSL will produce NaNs if negative numbers are used in pow()
+    # Explicitly perform abs() to avoid that
     def LN(self, xx, w):
-        actual = F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
+        #actual = F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
 
         centered = xx - xx.mean()
-        stddev = (centered ** 2).mean() ** 0.5
+        stddev = (torch.abs(centered) ** 2).mean() ** 0.5
         approx = (centered / stddev)*w.weight + w.bias
 
         #print(xx[:5], actual[:5], approx[:5])
 
         return approx
-        #return F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
 
     def FF(self, xx, w, name):
         #if name not in self.xx:
