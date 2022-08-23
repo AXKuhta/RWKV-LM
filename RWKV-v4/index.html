@@ -7,96 +7,50 @@
 </head>
 <body>
 	<script type="text/javascript">
-		function leading_pad(arr, size) {
-			arr = arr.slice(0)
-
-			while (arr.length < size)
-				arr.unshift(0)
-
-			return arr
-		}
-
-		function greedy_sampling(x) {
-			var max_k = 0
-			var max_v = x[0]
-
-			for (var i = 1; i < 50277; i++) {
-				if (x[i] > max_v) {
-					max_v = x[i]
-					max_k = i
-				}
-			}
-
-			return max_k
-		}
-
-
 		// use an async context to call onnxruntime functions.
 		async function main() {
 			try {
-				ort.logLevel = "verbose"
-				ort.logLevelInternal = "verbose"
+				ort.env.logLevel = "verbose"
+				ort.env.logLevelInternal = "verbose"
 
 				const sessionOption = {
-					//executionProviders: ['webgl'],
+					executionProviders: ['webgl'],
 					graphOptimizationLevel: 'all'
 				}
 
 				// create a new session and load the specific model.
-				const session = await ort.InferenceSession.create('./rwkv.onnx', sessionOption)
+				const session = await ort.InferenceSession.create('./matmul.onnx', sessionOption)
 
-				const xx_att_d = new Float32Array(12*768)
-				const aa_att_d = new Float32Array(12*768)
-				const bb_att_d = new Float32Array(12*768)
-				const pp_att_d = new Float32Array(12*768)
-				const xx_ffn_d = new Float32Array(12*768)
+				const start = performance.now()
 
-				pp_att_d.fill(-1e30)
+				const mat_d = new Float32Array(768*768)
+				const vec_d = new Float32Array(768)
 
-				const xx_att = new ort.Tensor('float32', xx_att_d, [12, 768])
-				const aa_att = new ort.Tensor('float32', aa_att_d, [12, 768])
-				const bb_att = new ort.Tensor('float32', bb_att_d, [12, 768])
-				const pp_att = new ort.Tensor('float32', pp_att_d, [12, 768])
-				const xx_ffn = new ort.Tensor('float32', xx_ffn_d, [12, 768])
+				mat_d.fill(1)
+				vec_d.fill(5)
+
+				const mat = new ort.Tensor('float32', mat_d, [768, 768])
+				const vec = new ort.Tensor('float32', vec_d, [768])
 
 				// prepare feeds. use model input names as keys.
-				var feeds = { idx: null, xx_att: xx_att, aa_att: aa_att, bb_att: bb_att, pp_att: pp_att, xx_ffn: xx_ffn }
-
-				// "\nIn a shocking finding"
-				var prompt = [187, 688, 247, 29103, 4560]
-				var ctx = [ prompt.shift() ]
+				var feeds = { mat: mat, vec: vec }
 
 				// feed inputs and run
 				for (var i = 0; i < 64; i++) {
-					var idx_d = Int32Array.from( leading_pad(ctx, 1024) )
-					var idx = new ort.Tensor('int32', idx_d, [1024])
-
-					feeds.idx = idx
-
 					var results = await session.run(feeds)
-					var token = greedy_sampling(results.x.data)
-
-					if (prompt.length == 0) {
-						ctx.push( token )
-					} else {
-						ctx.push( prompt.shift() )
-					}
-
-					feeds.xx_att = results.xx_att_r
-					feeds.aa_att = results.aa_att_r
-					feeds.bb_att = results.bb_att_r
-					feeds.pp_att = results.pp_att_r
-					feeds.xx_ffn = results.xx_ffn_r
-
+					console.log(results.x.data)
 					console.log(1 + i, "/", 64)
 				}
 
-				console.log(ctx + "")
+				const stop = performance.now()
+
+				console.log(((stop - start)/64) + "ms/token")
 			} catch (e) {
 				console.log(`failed to inference ONNX model: ${e}.`)
 			}
 		}
 
+		console.log("Hello")
 		main()
 	</script>
 </body>
