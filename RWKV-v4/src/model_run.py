@@ -294,6 +294,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         self.pp = copy.deepcopy(target.pp)
         self.hk = copy.deepcopy(target.hk)
 
+    # Turns everything into NaN on webgl
     def LN(self, xx, w):
         return F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
 
@@ -304,11 +305,16 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
-        k = torch.square(torch.relu(w.key.weight @ xk))
-        kv = w.value.weight @ k
+        #print(w.key.weight.shape, xk.shape)
 
-        return r * kv
+        mm1 = w.receptance.weight @ xr.view([768, 1])
+        mm2 = w.key.weight @ xk.view([768, 1])
+
+        r = torch.sigmoid(mm1.view([768]))
+        k = torch.square(torch.relu(mm2.view([3072])))
+        kv = w.value.weight @ k.view([3072, 1])
+
+        return r * kv.view([768])
 
     def SA(self, xx, w, name):
         #if name not in self.xx:
@@ -322,22 +328,27 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
+        mm1 = w.receptance.weight @ xr.view([768, 1])
 
-        k = w.key.weight @ xk
-        v = w.value.weight @ xv
+        r = torch.sigmoid(mm1.view([768]))
+
+        mm2 = w.key.weight @ xk.view([768, 1])
+        mm3 = w.value.weight @ xv.view([768, 1])
+
+        k = mm2.view([768])
+        v = mm3.view([768])
 
         pp = self.pp[name]
         aa = self.aa[name]
         bb = self.bb[name]
         ww = w.time_first + k
-        p = torch.maximum(pp, ww)
+        p = torch.max(torch.stack([pp, ww]), 0).values # torch.maximum(pp, ww)
         e1 = torch.exp(pp - p)
         e2 = torch.exp(ww - p)
         a = e1 * aa + e2 * v
         b = e1 * bb + e2
         ww = pp + w.time_decay
-        p = torch.maximum(ww, k)
+        p = torch.max(torch.stack([ww, k]), 0).values # torch.maximum(ww, k)
         e1 = torch.exp(ww - p)
         e2 = torch.exp(k - p)
         self.aa[name] = e1 * aa + e2 * v
@@ -346,7 +357,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         rwkv = r * a / b
 
-        return w.output.weight @ rwkv
+        mm4 = w.output.weight @ rwkv.view([768, 1])
+
+        return mm4.view([768])
 
     def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
@@ -360,34 +373,14 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
             self.xx[f'ffn.{i}'] = xx_ffn[i]
             if i == 0:
                 x = self.LN(x, w.blocks[i].ln0)
-            if i == 0 and self.model_type == 'RWKV-ffnPre':
-                x = x + self.FF(self.LN(x, w.blocks[i].ln1), w.blocks[i].ffnPre, f'ffnPre.{i}')
-            else:
-                x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+
+            x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
             x = x + self.FF(self.LN(x, w.blocks[i].ln2), w.blocks[i].ffn, f'ffn.{i}')
 
         x = self.LN(x, w.ln_out)
 
-        if RWKV_HEAD_QK_DIM > 0:
-            if self.hk == None:
-                self.hk = (w.head_k.weight @ x).unsqueeze(0)
-            else:
-                self.hk = torch.cat(
-                    [self.hk, (w.head_k.weight @ x).unsqueeze(0)], dim=0)
-            if self.hk.shape[0] > self.ctx_len:
-                self.hk = self.hk[-self.ctx_len:, :]
-
-            q = w.head_q.weight @ x
-
-            x = w.head.weight @ x
-            #x = x.cpu().numpy().tolist()
-
-            c = (self.hk @ q) / RWKV_HEAD_QK_DIM
-            for i in range(len(c)):
-                x[ctx[i]] += c[i]
-        else:
-            x = w.head.weight @ x
-            #x = x.cpu().numpy().tolist()
+        x = w.head.weight @ x.view([768, 1])
+        #x = x.cpu().numpy().tolist()
 
         xx_att_cd = []
         aa_att_cd = []
@@ -408,4 +401,4 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         pp_att_r = torch.stack(pp_att_cd)
         xx_ffn_r = torch.stack(xx_ffn_cd)
 
-        return x, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
+        return x.view([50277]), xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
