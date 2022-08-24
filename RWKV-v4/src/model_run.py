@@ -315,16 +315,18 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        #print(w.key.weight.shape, xk.shape)
-
         mm1 = w.receptance.weight @ xr.view([768, 1])
         mm2 = w.key.weight @ xk.view([768, 1])
+        mm1v = mm1.view([768])
 
-        r = torch.sigmoid(mm1.view([768]))
-        k = torch.square(torch.relu(mm2.view([3072])))
-        kv = w.value.weight @ k.view([3072, 1])
+        r = torch.sigmoid(mm1v)
+        k = torch.square(torch.relu(mm2))
+        kv = (w.value.weight @ k).view([768])
 
-        return r * kv.view([768])
+        self.debug_a.append(mm1v)
+        self.debug_b.append(r)
+
+        return r * kv
 
     def SA(self, xx, w, name):
         #if name not in self.xx:
@@ -374,6 +376,8 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
     def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
         x = w.emb.weight[ctx[-1]]
+        self.debug_a = []
+        self.debug_b = []
 
         for i in range(self.n_layer):
             self.xx[f'att.{i}'] = xx_att[i]
@@ -384,7 +388,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
             if i == 0:
                 x = self.LN(x, w.blocks[i].ln0)
 
-            x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+            #x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
             x = x + self.FF(self.LN(x, w.blocks[i].ln2), w.blocks[i].ffn, f'ffn.{i}')
 
         x = self.LN(x, w.ln_out)
@@ -411,4 +415,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         pp_att_r = torch.stack(pp_att_cd)
         xx_ffn_r = torch.stack(xx_ffn_cd)
 
-        return x.view([50277]), xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
+        debug_a = torch.stack(self.debug_a)
+        debug_b = torch.stack(self.debug_b)
+
+        return x.view([50277]), xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r, debug_a, debug_b
