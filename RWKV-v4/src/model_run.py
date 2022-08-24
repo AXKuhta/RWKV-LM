@@ -317,7 +317,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         mm1 = w.receptance.weight @ xr.view([768, 1])
         mm2 = w.key.weight @ xk.view([768, 1])
-        mm1v = mm1.view([768])
+        mm1v = mm1.view([768]) + 0.0
 
         r = torch.sigmoid(mm1v)
         k = torch.square(torch.relu(mm2))
