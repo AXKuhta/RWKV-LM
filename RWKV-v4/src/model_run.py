@@ -321,7 +321,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         r = torch.sigmoid(mm1v)
         k = torch.square(torch.relu(mm2))
-        kv = (w.value.weight @ k).view([768])
+        kv = (w.value.weight @ k).view([768]) + 0.0
 
         return r * kv
 
@@ -348,8 +348,8 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         mm2 = w.key.weight @ xk.view([768, 1])
         mm3 = w.value.weight @ xv.view([768, 1])
 
-        k = mm2.view([768])
-        v = mm3.view([768])
+        k = mm2.view([768]) + 0.0
+        v = mm3.view([768]) + 0.0
 
         pp = self.pp[name]
         aa = self.aa[name]
@@ -372,7 +372,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         mm4 = w.output.weight @ rwkv.view([768, 1])
 
-        return mm4.view([768])
+        return mm4.view([768]) + 0.0
 
     def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
@@ -390,7 +390,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
                 x = self.LN(x, w.blocks[i].ln0)
 
             x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
-            #x = x + self.FF(self.LN(x, w.blocks[i].ln2), w.blocks[i].ffn, f'ffn.{i}')
+            x = x + self.FF(self.LN(x, w.blocks[i].ln2), w.blocks[i].ffn, f'ffn.{i}')
 
         x = self.LN(x, w.ln_out)
 
@@ -419,4 +419,4 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         debug_a = torch.stack(self.debug_a)
         debug_b = torch.stack(self.debug_b)
 
-        return x.view([50277]), xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r, debug_a, debug_b
+        return x.view([50277]) + 0.0, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r, debug_a, debug_b
