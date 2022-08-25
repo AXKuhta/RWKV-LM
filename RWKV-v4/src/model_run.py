@@ -315,13 +315,13 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        mm1 = w.receptance.weight @ xr.view([768, 1])
-        mm2 = w.key.weight @ xk.view([768, 1])
-        mm1v = mm1.view([768]) + 0.0
+        mm1 = w.receptance.weight @ xr.view(-1, 1)
+        mm2 = w.key.weight @ xk.view(-1, 1)
+        mm1v = mm1.view(-1) + 0.0
 
         r = torch.sigmoid(mm1v)
         k = torch.square(torch.relu(mm2))
-        kv = (w.value.weight @ k).view([768]) + 0.0
+        kv = (w.value.weight @ k).view(-1) + 0.0
 
         return r * kv
 
@@ -337,19 +337,19 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        mm1 = w.receptance.weight @ xr.view([768, 1])
-        mm1v = mm1.view([768]) + 0.0
+        mm1 = w.receptance.weight @ xr.view(-1, 1)
+        mm1v = mm1.view(-1) + 0.0
 
         r = torch.sigmoid(mm1v)
 
         self.debug_a.append(mm1v)
         self.debug_b.append(r)
 
-        mm2 = w.key.weight @ xk.view([768, 1])
-        mm3 = w.value.weight @ xv.view([768, 1])
+        mm2 = w.key.weight @ xk.view(-1, 1)
+        mm3 = w.value.weight @ xv.view(-1, 1)
 
-        k = mm2.view([768]) + 0.0
-        v = mm3.view([768]) + 0.0
+        k = mm2.view(-1) + 0.0
+        v = mm3.view(-1) + 0.0
 
         pp = self.pp[name]
         aa = self.aa[name]
@@ -370,9 +370,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         rwkv = r * a / b
 
-        mm4 = w.output.weight @ rwkv.view([768, 1])
+        mm4 = w.output.weight @ rwkv.view(-1, 1)
 
-        return mm4.view([768]) + 0.0
+        return mm4.view(-1) + 0.0
 
     def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
@@ -394,7 +394,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         x = self.LN(x, w.ln_out)
 
-        x = w.head.weight @ x.view([768, 1])
+        x = w.head.weight @ x.view(-1, 1)
         #x = x.cpu().numpy().tolist()
 
         xx_att_cd = []
@@ -419,4 +419,4 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         debug_a = torch.stack(self.debug_a)
         debug_b = torch.stack(self.debug_b)
 
-        return x.view([50277]) + 0.0, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r, debug_a, debug_b
+        return x.view(-1) + 0.0, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r, debug_a, debug_b
