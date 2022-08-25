@@ -7,15 +7,6 @@
 </head>
 <body>
 	<script type="text/javascript">
-		function leading_pad(arr, size) {
-			arr = arr.slice(0)
-
-			while (arr.length < size)
-				arr.unshift(0)
-
-			return arr
-		}
-
 		function greedy_sampling(x) {
 			var max_k = 0
 			var max_v = x[0]
@@ -45,6 +36,7 @@
 				// create a new session and load the specific model.
 				const session = await ort.InferenceSession.create('./rwkv.onnx', sessionOption)
 
+				const idx_d = new Int32Array(1024)
 				const xx_att_d = new Float32Array(12*768)
 				const aa_att_d = new Float32Array(12*768)
 				const bb_att_d = new Float32Array(12*768)
@@ -53,6 +45,7 @@
 
 				pp_att_d.fill(-1e30)
 
+				const idx = new ort.Tensor('int32', idx_d, [1024])
 				const xx_att = new ort.Tensor('float32', xx_att_d, [12, 768])
 				const aa_att = new ort.Tensor('float32', aa_att_d, [12, 768])
 				const bb_att = new ort.Tensor('float32', bb_att_d, [12, 768])
@@ -60,7 +53,7 @@
 				const xx_ffn = new ort.Tensor('float32', xx_ffn_d, [12, 768])
 
 				// prepare feeds. use model input names as keys.
-				var feeds = { idx: null, xx_att: xx_att, aa_att: aa_att, bb_att: bb_att, pp_att: pp_att, xx_ffn: xx_ffn }
+				var feeds = { idx: idx, xx_att: xx_att, aa_att: aa_att, bb_att: bb_att, pp_att: pp_att, xx_ffn: xx_ffn }
 
 				// "\nIn a shocking finding"
 				var prompt = [187, 688, 247, 29103, 4560]
@@ -68,10 +61,10 @@
 
 				// feed inputs and run
 				for (var i = 0; i < 64; i++) {
-					var idx_d = Int32Array.from( leading_pad(ctx, 1024) )
-					var idx = new ort.Tensor('int32', idx_d, [1024])
-
-					feeds.idx = idx
+					// RWKV only looks at the very last token in the context
+					// It may as well have been a single int32 input, but ONNX doesn't allow to pass just an int32, it has to be a tensor
+					// So instead of having a single-element tensor, I decided to leave it ctx_len sized
+					idx.data[1023] = ctx.at(-1)
 
 					var results = await session.run(feeds)
 					var token = greedy_sampling(results.x.data)

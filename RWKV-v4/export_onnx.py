@@ -14,6 +14,11 @@ n_layer = 12
 n_embd = 768
 ctx_len = 1024
 
+# MODEL_NAME = 'RWKV-4-Pile-430M-20220808-8066'
+# n_layer = 24
+# n_embd = 1024
+# ctx_len = 1024
+
 os.environ['RWKV_FLOAT_MODE'] = 'fp32'
 os.environ['RWKV_RUN_DEVICE'] = 'cpu'
 model_type = 'RWKV'
@@ -43,18 +48,18 @@ def sample_logits(out, temperature=1.0, top_p=0.7):
 def rnn_test(context):
 	model = RWKV_RNN(MODEL_NAME, os.environ['RWKV_RUN_DEVICE'], model_type, n_layer, n_embd, ctx_len)
 
-	xx_att = torch.zeros(12, 768)
-	aa_att = torch.zeros(12, 768)
-	bb_att = torch.zeros(12, 768)
-	pp_att = torch.zeros(12, 768) - 1e30
-	xx_ffn = torch.zeros(12, 768)
+	xx_att = torch.zeros(n_layer, n_embd)
+	aa_att = torch.zeros(n_layer, n_embd)
+	bb_att = torch.zeros(n_layer, n_embd)
+	pp_att = torch.zeros(n_layer, n_embd) - 1e30
+	xx_ffn = torch.zeros(n_layer, n_embd)
 
 	ctx = tokenizer.encode(context)
 
 	for i in range(64):
 		ttx = [] + ctx
 
-		while len(ttx) < 768:
+		while len(ttx) < ctx_len:
 			ttx.insert(0, 0)
 
 		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = model( torch.tensor(ttx), xx_att, aa_att, bb_att, pp_att, xx_ffn )
@@ -68,11 +73,11 @@ def rnn_test(context):
 def rnn_export():
 	model = RWKV_RNN(MODEL_NAME, os.environ['RWKV_RUN_DEVICE'], model_type, n_layer, n_embd, ctx_len)
 
-	ctx = torch.randint(5000, (1024,), dtype=torch.int32 ) + 100
-	xx_att = torch.zeros(12, 768)
-	aa_att = torch.zeros(12, 768)
-	bb_att = torch.zeros(12, 768)
-	pp_att = torch.zeros(12, 768) - 1e30
-	xx_ffn = torch.zeros(12, 768)
+	ctx = torch.randint(5000, (ctx_len,), dtype=torch.int32 ) + 100
+	xx_att = torch.zeros(n_layer, n_embd)
+	aa_att = torch.zeros(n_layer, n_embd)
+	bb_att = torch.zeros(n_layer, n_embd)
+	pp_att = torch.zeros(n_layer, n_embd) - 1e30
+	xx_ffn = torch.zeros(n_layer, n_embd)
 
 	torch.onnx.export(model, args=(ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn), f="rwkv.onnx", input_names = ["idx", "xx_att", "aa_att", "bb_att", "pp_att", "xx_ffn"], output_names = ["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], verbose=True)
