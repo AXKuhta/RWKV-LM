@@ -301,7 +301,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         #actual = F.layer_norm(xx, (self.n_embd,), weight=w.weight, bias=w.bias)
 
         centered = xx - xx.mean()
-        stddev = (torch.abs(centered) ** 2).mean() ** 0.5
+        stddev = (torch.abs(centered) ** 2).mean().add(1e-05).sqrt()
         approx = (centered / stddev)*w.weight + w.bias
 
         #print(xx[:5], actual[:5], approx[:5])
