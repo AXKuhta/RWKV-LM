@@ -57,7 +57,7 @@ def rnn_test(context):
 		while len(ttx) < 768:
 			ttx.insert(0, 0)
 
-		x, xx_att, aa_att, bb_att, pp_att, xx_ffn, debug_a, debug_b = model( torch.tensor(ttx), xx_att, aa_att, bb_att, pp_att, xx_ffn )
+		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = model( torch.tensor(ttx), xx_att, aa_att, bb_att, pp_att, xx_ffn )
 
 		char = sample_logits( x.tolist() )
 		char = char.item()
@@ -75,4 +75,4 @@ def rnn_export():
 	pp_att = torch.zeros(12, 768) - 1e30
 	xx_ffn = torch.zeros(12, 768)
 
-	torch.onnx.export(model, args=(ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn), f="rwkv.onnx", input_names = ["idx", "xx_att", "aa_att", "bb_att", "pp_att", "xx_ffn"], output_names = ["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r", "debug_a", "debug_b"], verbose=True)
+	torch.onnx.export(model, args=(ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn), f="rwkv.onnx", input_names = ["idx", "xx_att", "aa_att", "bb_att", "pp_att", "xx_ffn"], output_names = ["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], verbose=True)
