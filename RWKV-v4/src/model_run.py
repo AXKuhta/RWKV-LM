@@ -392,23 +392,49 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         x = w.head.weight @ x.unsqueeze(1)
         #x = x.cpu().numpy().tolist()
 
-        xx_att_cd = []
-        aa_att_cd = []
-        bb_att_cd = []
-        pp_att_cd = []
-        xx_ffn_cd = []
+        # WebGL can't have more than 16 input textures in a shader
+        # Attempting to torch.stack() 24 tensors will hit that limitation
+        # So stack 12 at a time then cat them together
+
+        # Stacklist
+        xx_att_sl = []
+        aa_att_sl = []
+        bb_att_sl = []
+        pp_att_sl = []
+        xx_ffn_sl = []
+
+        # Catlist
+        xx_att_cl = []
+        aa_att_cl = []
+        bb_att_cl = []
+        pp_att_cl = []
+        xx_ffn_cl = []
 
         for i in range(self.n_layer):
-             xx_att_cd.append( self.xx[f'att.{i}'] )
-             aa_att_cd.append( self.aa[f'att.{i}'] )
-             bb_att_cd.append( self.bb[f'att.{i}'] )
-             pp_att_cd.append( self.pp[f'att.{i}'] )
-             xx_ffn_cd.append( self.xx[f'ffn.{i}'] )
+             xx_att_sl.append( self.xx[f'att.{i}'] )
+             aa_att_sl.append( self.aa[f'att.{i}'] )
+             bb_att_sl.append( self.bb[f'att.{i}'] )
+             pp_att_sl.append( self.pp[f'att.{i}'] )
+             xx_ffn_sl.append( self.xx[f'ffn.{i}'] )
 
-        xx_att_r = torch.stack(xx_att_cd)
-        aa_att_r = torch.stack(aa_att_cd)
-        bb_att_r = torch.stack(bb_att_cd)
-        pp_att_r = torch.stack(pp_att_cd)
-        xx_ffn_r = torch.stack(xx_ffn_cd)
+             # Adjust the number here for models with less than 12 layers
+             if ((i+1) % 12 == 0):
+                 xx_att_cl.append( torch.stack(xx_att_sl) )
+                 aa_att_cl.append( torch.stack(aa_att_sl) )
+                 bb_att_cl.append( torch.stack(bb_att_sl) )
+                 pp_att_cl.append( torch.stack(pp_att_sl) )
+                 xx_ffn_cl.append( torch.stack(xx_ffn_sl) )
+
+                 xx_att_sl = []
+                 aa_att_sl = []
+                 bb_att_sl = []
+                 pp_att_sl = []
+                 xx_ffn_sl = []
+
+        xx_att_r = torch.cat(xx_att_cl)
+        aa_att_r = torch.cat(aa_att_cl)
+        bb_att_r = torch.cat(bb_att_cl)
+        pp_att_r = torch.cat(pp_att_cl)
+        xx_ffn_r = torch.cat(xx_ffn_cl)
 
         return x.squeeze(1) + 0.0, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
