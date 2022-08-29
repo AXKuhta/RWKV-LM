@@ -304,9 +304,12 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
-        k = torch.square(torch.relu(w.key.weight @ xk))
-        kv = w.value.weight @ k
+        mm1 = w.receptance.weight @ xr.unsqueeze(1)
+        mm2 = w.key.weight @ xk.unsqueeze(1)
+
+        r = torch.sigmoid(mm1.squeeze(1))
+        k = torch.square(torch.relu(mm2))
+        kv = (w.value.weight @ k).squeeze(1)
 
         return r * kv
 
@@ -322,10 +325,15 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
+        mm1 = w.receptance.weight @ xr.unsqueeze(1)
 
-        k = w.key.weight @ xk
-        v = w.value.weight @ xv
+        r = torch.sigmoid(mm1.squeeze(1))
+
+        mm2 = w.key.weight @ xk.unsqueeze(1)
+        mm3 = w.value.weight @ xv.unsqueeze(1)
+
+        k = mm2.squeeze(1)
+        v = mm3.squeeze(1)
 
         pp = self.pp[name]
         aa = self.aa[name]
@@ -346,7 +354,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         rwkv = r * a / b
 
-        return w.output.weight @ rwkv
+        mm4 = w.output.weight @ rwkv.unsqueeze(1)
+
+        return mm4.squeeze(1)
 
     def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
@@ -360,34 +370,12 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
             self.xx[f'ffn.{i}'] = xx_ffn[i]
             if i == 0:
                 x = self.LN(x, w.blocks[i].ln0)
-            if i == 0 and self.model_type == 'RWKV-ffnPre':
-                x = x + self.FF(self.LN(x, w.blocks[i].ln1), w.blocks[i].ffnPre, f'ffnPre.{i}')
-            else:
-                x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
+
+            x = x + self.SA(self.LN(x, w.blocks[i].ln1), w.blocks[i].att, f'att.{i}')
             x = x + self.FF(self.LN(x, w.blocks[i].ln2), w.blocks[i].ffn, f'ffn.{i}')
 
         x = self.LN(x, w.ln_out)
-
-        if RWKV_HEAD_QK_DIM > 0:
-            if self.hk == None:
-                self.hk = (w.head_k.weight @ x).unsqueeze(0)
-            else:
-                self.hk = torch.cat(
-                    [self.hk, (w.head_k.weight @ x).unsqueeze(0)], dim=0)
-            if self.hk.shape[0] > self.ctx_len:
-                self.hk = self.hk[-self.ctx_len:, :]
-
-            q = w.head_q.weight @ x
-
-            x = w.head.weight @ x
-            #x = x.cpu().numpy().tolist()
-
-            c = (self.hk @ q) / RWKV_HEAD_QK_DIM
-            for i in range(len(c)):
-                x[ctx[i]] += c[i]
-        else:
-            x = w.head.weight @ x
-            #x = x.cpu().numpy().tolist()
+        x = w.head.weight @ x.unsqueeze(1)
 
         xx_att_cd = []
         aa_att_cd = []
