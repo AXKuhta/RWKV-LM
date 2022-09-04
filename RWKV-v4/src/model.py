@@ -319,6 +319,9 @@ class GPT(nn.Module):
 
         self.ctx_len = config.ctx_len
 
+        # JIT!
+        self.blocks = torch.jit.trace(self.blocks.cuda(), torch.rand([12, 1024, 512], device="cuda:0"))
+
         try:
             if os.environ['RWKV_LOAD_MODEL'] == str(False):
                 RWKV_Init(self, config) 
