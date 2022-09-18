@@ -396,4 +396,4 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         pp_att_r = torch.stack(pp_att_cd)
         xx_ffn_r = torch.stack(xx_ffn_cd)
 
-        return x, xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
+        return x.squeeze(1), xx_att_r, aa_att_r, bb_att_r, pp_att_r, xx_ffn_r
