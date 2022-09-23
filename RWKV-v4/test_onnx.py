@@ -3,6 +3,7 @@ from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
 from torch.nn import functional as F
 import numpy as np
 import torch
+import array
 import time
 
 def lprint(txt):
@@ -21,6 +22,12 @@ def sample_logits(out, temperature=1.0, top_p=0.7):
 
 	return torch.multinomial(probs, num_samples=1)[0]
 
+def read_emb(token):
+	embds.seek(4*n_embd*token)
+	floats = array.array("f", embds.read(4*n_embd))
+
+	return floats.tolist()
+
 def onnx_rnn_run(ctx):
 	xx_att = torch.zeros(12, 768).tolist()
 	aa_att = torch.zeros(12, 768).tolist()
@@ -33,15 +40,9 @@ def onnx_rnn_run(ctx):
 	start = time.time_ns()
 
 	for i in range(64):
-		tgt = len(ctx)
-		ttx = [] + ptx
+		emb = read_emb(ptx[-1])
 
-		# RNN takes the very last token
-		# Pad the input from the front
-		while len(ttx) < 1024:
-			ttx.insert(0, 0)
-
-		inputs = { "idx": ttx, "xx_att": xx_att, "aa_att": aa_att, "bb_att": bb_att, "pp_att": pp_att, "xx_ffn": xx_ffn }
+		inputs = { "emb": emb, "xx_att": xx_att, "aa_att": aa_att, "bb_att": bb_att, "pp_att": pp_att, "xx_ffn": xx_ffn }
 
 		outputs = session.run(output_names=["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], input_feed=inputs)
 		state = outputs[0] # [50277]
@@ -72,6 +73,7 @@ opt = SessionOptions()
 #opt.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
 tokenizer = PreTrainedTokenizerFast(tokenizer_file="20B_tokenizer.json")
 session = InferenceSession("rwkv.onnx", opt)
+embds = open("emb.weight.bin", "rb")
 
 text = """\nIn a shocking finding,"""
 ctx = tokenizer.encode(text)

@@ -55,20 +55,20 @@ def rnn_test(context):
 	xx_ffn = torch.zeros(n_layer, n_embd)
 
 	ctx = tokenizer.encode(context)
-	ttx = [0]*ctx_len
+	emb = 0
 
 	print(context, end='', flush=True)
 
 	for i in range(64):
 		if len(ctx) > 0:
-			ttx[-1] = ctx.pop(0)
+			emb = model.w.emb.weight[ ctx.pop(0) ]
 
-		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = model( torch.tensor(ttx), xx_att, aa_att, bb_att, pp_att, xx_ffn )
+		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = model( emb, xx_att, aa_att, bb_att, pp_att, xx_ffn )
 
 		if len(ctx) == 0:
 			char = sample_logits( x.tolist() )
 			char = char.item()
-			ttx[-1] = char
+			emb = model.w.emb.weight[char]
 
 			print(tokenizer.decode(char), end='', flush=True)
 
@@ -83,26 +83,26 @@ def jit_rnn_test(context):
 	pp_att = torch.zeros(n_layer, n_embd) - 1e30
 	xx_ffn = torch.zeros(n_layer, n_embd)
 
-	ctx = torch.randint(5000, (ctx_len,), dtype=torch.int32 ) + 100
+	emb = torch.rand(n_embd)
 
-	jit = torch.jit.trace(model.eval(), (ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn))
+	jit = torch.jit.trace(model.eval(), (emb, xx_att, aa_att, bb_att, pp_att, xx_ffn))
 	jit = torch.jit.optimize_for_inference(jit)
 
 	ctx = tokenizer.encode(context)
-	ttx = [0]*ctx_len
+	emb = 0
 
 	print(context, end='', flush=True)
 
 	for i in range(64):
 		if len(ctx) > 0:
-			ttx[-1] = ctx.pop(0)
+			emb = model.w.emb.weight[ ctx.pop(0) ]
 
-		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = jit( torch.tensor(ttx), xx_att, aa_att, bb_att, pp_att, xx_ffn )
+		x, xx_att, aa_att, bb_att, pp_att, xx_ffn  = jit( emb, xx_att, aa_att, bb_att, pp_att, xx_ffn )
 
 		if len(ctx) == 0:
 			char = sample_logits( x.tolist() )
 			char = char.item()
-			ttx[-1] = char
+			emb = model.w.emb.weight[char]
 
 			print(tokenizer.decode(char), end='', flush=True)
 
@@ -113,11 +113,13 @@ def jit_rnn_test(context):
 def rnn_export():
 	model = RWKV_RNN(MODEL_NAME, os.environ['RWKV_RUN_DEVICE'], model_type, n_layer, n_embd, ctx_len)
 
-	ctx = torch.randint(5000, (ctx_len,), dtype=torch.int32 ) + 100
+	emb = torch.rand(n_embd)
 	xx_att = torch.zeros(n_layer, n_embd)
 	aa_att = torch.zeros(n_layer, n_embd)
 	bb_att = torch.zeros(n_layer, n_embd)
 	pp_att = torch.zeros(n_layer, n_embd) - 1e30
 	xx_ffn = torch.zeros(n_layer, n_embd)
 
-	torch.onnx.export(model, args=(ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn), f="rwkv.onnx", input_names = ["idx", "xx_att", "aa_att", "bb_att", "pp_att", "xx_ffn"], output_names = ["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], verbose=True)
+	model.w.emb.weight.numpy().tofile("emb.weight.bin")
+	torch.onnx.export(model, args=(emb, xx_att, aa_att, bb_att, pp_att, xx_ffn), f="rwkv.onnx", input_names = ["emb", "xx_att", "aa_att", "bb_att", "pp_att", "xx_ffn"], output_names = ["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], verbose=False)
+

@@ -348,9 +348,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         return w.output.weight @ rwkv
 
-    def forward(self, ctx, xx_att, aa_att, bb_att, pp_att, xx_ffn):
+    def forward(self, emb, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
-        x = w.emb.weight[ctx[-1]]
+        x = emb
 
         for i in range(self.n_layer):
             self.xx[f'att.{i}'] = xx_att[i]
