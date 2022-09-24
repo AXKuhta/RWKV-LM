@@ -4,6 +4,7 @@ from torch.nn import functional as F
 import numpy as np
 import torch
 import array
+import json
 import time
 
 def lprint(txt):
@@ -29,11 +30,18 @@ def read_emb(token):
 	return floats.tolist()
 
 def onnx_rnn_run(ctx):
-	xx_att = torch.zeros(12, 768).tolist()
-	aa_att = torch.zeros(12, 768).tolist()
-	bb_att = torch.zeros(12, 768).tolist()
-	pp_att = (torch.zeros(12, 768) - 1e30).tolist()
-	xx_ffn = torch.zeros(12, 768).tolist()
+	xx_att = []
+	aa_att = []
+	bb_att = []
+	pp_att = []
+	xx_ffn = []
+
+	for i in range(n_layer):
+		xx_att.append( torch.zeros(n_embd).tolist() )
+		aa_att.append( torch.zeros(n_embd).tolist() )
+		bb_att.append( torch.zeros(n_embd).tolist() )
+		pp_att.append( (torch.zeros(n_embd) - 1e30).tolist() )
+		xx_ffn.append( torch.zeros(n_embd).tolist() )
 
 	ptx = [ ctx.pop(0) ]
 
@@ -42,18 +50,18 @@ def onnx_rnn_run(ctx):
 	for i in range(64):
 		emb = read_emb(ptx[-1])
 
-		inputs = { "emb": emb, "xx_att": xx_att, "aa_att": aa_att, "bb_att": bb_att, "pp_att": pp_att, "xx_ffn": xx_ffn }
+		for i in range(n_layer):
+			inputs = { "emb": emb, "xx_att": xx_att[i], "aa_att": aa_att[i], "bb_att": bb_att[i], "pp_att": pp_att[i], "xx_ffn": xx_ffn[i] }
+			outputs = layers[i].run(output_names=["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], input_feed=inputs)
 
-		outputs = session.run(output_names=["x", "xx_att_r", "aa_att_r", "bb_att_r", "pp_att_r", "xx_ffn_r"], input_feed=inputs)
+			emb = outputs[0]
+			xx_att[i] = outputs[1]
+			aa_att[i] = outputs[2]
+			bb_att[i] = outputs[3]
+			pp_att[i] = outputs[4]
+			xx_ffn[i] = outputs[5]
+
 		state = outputs[0] # [50277]
-
-		# [12][768]
-		xx_att = outputs[1]
-		aa_att = outputs[2]
-		bb_att = outputs[3]
-		pp_att = outputs[4]
-		xx_ffn = outputs[5]
-
 		char = sample_logits(state)
 		char = char.item()
 
@@ -69,20 +77,30 @@ def onnx_rnn_run(ctx):
 
 	print("\n", (stop - start)/1000/1000/64, "ms per token")
 
-opt = SessionOptions()
-#opt.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
-tokenizer = PreTrainedTokenizerFast(tokenizer_file="20B_tokenizer.json")
-session = InferenceSession("rwkv.onnx", opt)
-embds = open("emb.weight.bin", "rb")
 
-text = """\nIn a shocking finding,"""
-ctx = tokenizer.encode(text)
+params_f = open("rwkv.json", "r")
+params = json.load(params_f)
+params_f.close()
 
-n_layer, n_embd = session.get_inputs()[1].shape
-ctx_len = session.get_inputs()[0].shape[0]
+n_layer, n_embd, ctx_len = (params["n_layer"], params["n_embd"], params["ctx_len"])
+
 print(" n_layer:", n_layer)
 print(" n_embd:", n_embd)
 print(" ctx_len:", ctx_len)
+
+tokenizer = PreTrainedTokenizerFast(tokenizer_file="20B_tokenizer.json")
+embds = open("emb.weight.bin", "rb")
+
+layers = []
+
+opt = SessionOptions()
+#opt.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+
+for i in range(n_layer):
+	layers.append( InferenceSession(f"rwkv.{i}.onnx", opt) )
+
+text = """\nIn a shocking finding,"""
+ctx = tokenizer.encode(text)
 
 print("Tokens in context:", len(ctx))
 lprint( tokenizer.decode(ctx) )
