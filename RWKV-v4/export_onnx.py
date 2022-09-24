@@ -132,7 +132,10 @@ def jit_rnn_test(context):
 	print("")
 
 
-
+# The performance with split model on ONNX is really bad:
+# 169m model, Intel Core i7 2760QM locked to 2000 MHz
+# 287 ms/token with normal model
+# 624 ms/token with split model
 def rnn_export():
 	model = RWKV_RNN(MODEL_NAME, os.environ['RWKV_RUN_DEVICE'], model_type, n_layer, n_embd, ctx_len)
 
