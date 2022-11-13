@@ -246,7 +246,8 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         w = torch.load(MODEL_NAME + '.pth',
                        map_location=torch.device(RUN_DEVICE))
         for x in w.keys():
-            w[x] = w[x].float()
+            if '.ln' in x or 'ln_out' in x:
+                w[x] = w[x].float()
             if '.time_' in x:
                 w[x] = w[x].squeeze()
             if '.time_decay' in x:
@@ -273,6 +274,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
                     here = getattr(here, xx[i])
 
         self.clear()
+
+        self.w.emb.weight = self.w.emb.weight.float()
+        self.w.head.weight = self.w.head.weight.float()
 
     def clear(self):
         self.xx = {}
@@ -305,9 +309,9 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
-        k = torch.square(torch.relu(w.key.weight @ xk))
-        kv = w.value.weight @ k
+        r = torch.sigmoid(w.receptance.weight.float() @ xr)
+        k = torch.square(torch.relu(w.key.weight.float() @ xk))
+        kv = w.value.weight.float() @ k
 
         return r * kv
 
@@ -323,10 +327,10 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
         xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
         self.xx[name] = xx
 
-        r = torch.sigmoid(w.receptance.weight @ xr)
+        r = torch.sigmoid(w.receptance.weight.float() @ xr)
 
-        k = w.key.weight @ xk
-        v = w.value.weight @ xv
+        k = w.key.weight.float() @ xk
+        v = w.value.weight.float() @ xv
 
         pp = self.pp[name]
         aa = self.aa[name]
@@ -347,7 +351,7 @@ class RWKV_RNN(torch.nn.Module): # this is running in FP32 at this moment
 
         rwkv = r * a / b
 
-        return w.output.weight @ rwkv
+        return w.output.weight.float() @ rwkv
 
     def forward(self, emb, xx_att, aa_att, bb_att, pp_att, xx_ffn):
         w = self.w
